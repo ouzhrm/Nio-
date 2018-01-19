@@ -1,0 +1,16 @@
+参考：http://blog.csdn.net/u010412719/article/details/52863185
+http://grepcode.com/file/repository.grepcode.com/java/root/jdk/openjdk/8u40-b25/sun/nio/ch/SelectorImpl.java#SelectorImpl.register%28java.nio.channels.spi.AbstractSelectableChannel%2Cint%2Cjava.lang.Object%29
+
+1、ServerSocketChannel的创建
+直接调用open()静态方法，底层实际是创建一个其子类ServerSocketChannelImpl对象。
+
+2、绑定端口
+先调用socket()方法,紧随其后调用bind方法。而socket()实际上是返回创建一个serverSocket对象。
+再通过serverSocket方法绑定端口。
+
+3、注册、接收
+调用register()方法，底层是其实是生成一个selectKey,然后保存到pollWrapper中，
+而selector.select()就是遍历这个pollWrapper,根据selectKey比较，从而取出对应的channel,
+进行相应的缓冲区读写操作。
+
+

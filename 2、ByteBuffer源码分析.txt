@@ -1,0 +1,25 @@
+Nio三个比较重要的api是需要分析的，缓冲区Buffer,通道Channel，选择器selector。
+
+之前已经分析过Buffer的内部实现，现在分析一下其子类ByteBuffer,而ByteBuffer是
+在Buffer的基础上进行一些扩充。
+ByteBuffer的属性：
+Byte[] hb   将数据存储在字节数组中
+int offset  位置（类似position）
+boolean isReadOnly  是否可读
+
+分配容量：
+allocateDirect()、allocate()、wrap()：都是分配存储容量，但allocateDirect分配内存是在
+堆外的。这三个方法最终还是调用其构造方法进行初始化参数。wrap()可以自定义一个存储
+数据的数组。
+
+存取数据：
+put()和get():先进行数据复制，即System.arraycopy（），然后position会加一，这样才能操作下一个位置的数据，。
+
+slice()和duplicate()：复制，返回一个ByteBuffer，将原来的ByteBuffer复制一份，数据内容
+是共享的，但是位置position（slice()的位置会复制过来）,边界limit,即容量capacity是独立的。
+
+此外还有一些比较方便的api,asIntBuffer(),putInt等，这样就不需要我们自己讲数据类型不同
+的进行转换了。
+
+compact():先将未读的数组复制过去，然后将position设置为最后一个未读元素位置，limit和
+capaticy相等。

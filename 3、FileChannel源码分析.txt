@@ -1,0 +1,23 @@
+FileChannel主要是用于读写文件里的数据的。
+1、打开通道：调用File对象的getChannel（）方法或者FileChannel的静态方法open（）方法直接
+打开。getChannel方法也是调用open方法的，而open方法调用FileChannelImpl方法的open,这个
+FileChannelImpl只能去查openjdk了，在grepCode官网我们可以看到，FileChannelImpl的channel是
+通过生产者+反射的形式创建的。
+
+2、将数据读到缓冲区中：调用read()方法，而无论read()还是write()方法都是加锁的。
+然后先申请一块临时的堆外内存，然后将数据写到这个内存中，最后将内存数据拷贝到缓冲区中。
+为什么要经历这一步呢？因为可以提高效率，通过这个堆外临时内存，调用操作系统提供
+的底层标准IO系统调用函数 read()、write() ，此时调用此函数的进程
+（在JAVA中即java进程）由当前的用户态切换到内核态，
+然后OS的内核代码负责将相应的文件数据读取到内核的
+IO缓冲区，然后再把数据从内核IO缓冲区
+拷贝到进程的私有地址空间中去，这
+样便完成了一次IO操作。不理解的可以看：
+http://blog.csdn.net/linxdcn/article/details/72903422
+
+3、将缓冲区的数据写到通道中：channel对象调用write方法，write()底层实现是先同理加锁，
+然后判断是否为DirectBuffer类型，即是否为临时堆外内存，如果是，直接写入，如果不是，将
+调用原生的方法写入。至于原生里面写的是什么，我也不是特别清楚，如果我作一些大胆的猜测的
+话，就是也是操作系统与内存之间的交互。
+
+4、最后关闭channel,调用close()方法，底层就是将open这个状态改成false.

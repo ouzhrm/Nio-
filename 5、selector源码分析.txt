@@ -1,0 +1,50 @@
+﻿Selector selector = Selector.open()；实际上就是new 了一个 WindowsSelectorImpl对象实例。
+
+其 WindowsSelectorImpl构造函数为：
+     1、Pipe.open()打开一个管道（打开管道的实现后面再看）；
+
+直接返回一个PipeImpl类的对象实例，PipeImpl的构造方法里调用了doPrivileged方法
+利用doPrivileged就实现了没有权限的人借用有权限的人来达到一定的目的。
+AccessController.doPrivileged(new Initializer(sp)) 经过
+权限的检查之后就会直接执行Initializer中的run方法 
+，下面来看下Initializer这个类中的run方法。
+创建两个本地的socketChannel,然后连接（链接的过程通过写一
+个随机long做两个socket的链接校验），两个socketChannel
+分别实现了管道的source与sink端。 
+
+
+     2、拿到wakeupSourceFd和wakeupSinkFd两个文件描述符；
+
+     3、把唤醒端的文件描述符（wakeupSourceFd）放到pollWrapper里；
+将source的POLLIN事件标识为感兴趣的，当sink端有数据写入时，
+source对应的文件描述符wakeupSourceFd就会处于就绪状态
+
+
+-----------------------
+小结
+
+Selector selector = Selector.open()；实际上就是new 
+了一个 WindowsSelectorImpl对象实例。
+
+以及建立了Pipe，并把pipe的wakeupSourceFd放入pollArray中,
+这个pollArray是Selector的枢纽。这里是以Windows的实现来
+看，在windows下通过两个链接的socketChannel实现了Pipe，
+linux下则是直接使用系统的pipe。
+
+
+
+最底层方面： Selector.open()方法最终会调jni里的poll函数，
+这个函数是用c语言实现的。
+把pollfdArray放到poll里去。调用poll会使得线程挂起，
+当有客户端连接进来的时候，poll函数就会返回一个整数，
+代表了数组中有多少个socket上有数据到达。对于第一次连接这种情况，
+返回值就是1。
+
+接着，我们先检查pollfdArray[0]上是不是有数据，如果有的话，再去
+调用accept去接受新的连接，新的连接创建以后，我们会把新的socket放
+到pollfdArray中去，继续这个循环，然后在poll中再次休眠。
+
+当pollfdArray这个数组中有任何一个socket上有数据到达，poll函数就会
+返回，然后接下来，我们逐个去检查这个socket是不是可读，如果可读，就
+去读数据(recv到buf里)；以及是不是可写，如果可写就把 buf 写到
+socket中去
