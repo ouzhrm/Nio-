@@ -1,0 +1,38 @@
+﻿我们知道，Buffer作为Nio所有缓冲区的重要父类，下面的子类有七种基本数据类型
+对应的Buffer,分别是：ByteBuffer,ShortBuffer,IntBuffer,LongBuffer，FloatBuffer,
+DoubleBuffer，CharBuffer.
+Buffer类下面有三个属性特别重要，分别是limit,position,capacity，此外还有mark。
+mark是一个标记，用于标记position.一般默认是-1。Buffer对象调用mark方法会将position
+赋值给mark对象。
+
+capacity是容量，是缓冲区的大小，默认一般不会改变。设置capacity可以调用
+：比如子类的ByteBuffer.调用allocate方法，传入容量大小。
+
+position:位置，Buffer对象调用get方法后，position会加1，从read模式转到write模式或者
+从write模式转到read模式都会置零。Buffer对象调用position方法会返回position的值，
+如果调用position方法传入参数，这个参数就是我们设置position的值。
+
+limit：边界（这里是我的翻译）。如果当前是write模式，limit等于capacity，如果是模式，limit
+会随着position加一而加一，也就是说limit = position.从读模式跳到写模式，Buffer对象
+（下面涉及到Buffer对象都是以buffer称呼）会调用flip方法，flip方法底层就是将position赋值
+给limit,mark = -1 ，position = 0;而从写模式跳到read模式，buffer会调用clear方法，clear
+方法底层是将capacity赋值给limit,position = 0,mark = -1,无论从读到写，还是从写到读，
+这两方法(flip,clear)都会返回buffer.buffer直接调用limit()方法，会返回limit的值。如果
+传入参数，就可直接设置limit值，也就是传入的这个参数就是limit值。
+
+呼。。说完参数，然后讲讲Buffer里的方法。
+
+reset() ：将mark赋值给position.
+
+clear()、flip()：就不说了，，，上面讲过了。。
+
+compact（）：这个方法和clear类似，
+position = limit-position ,limit = capacity ,mark = -1
+
+rewind（）：position置零。mark = -1,这里是数据在读写完后，备份数据用的。
+
+remaining（）：返回limit - position的值
+
+hasRemaining：返回一个布尔值（position < limit），即remain()>0的封装。这个有点
+像集合的contain和indexof方法。
+
