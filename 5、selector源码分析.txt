@@ -1,50 +1,88 @@
-﻿Selector selector = Selector.open()；实际上就是new 了一个 WindowsSelectorImpl对象实例。
+Selector selector = Selector.open()；
+实际上就是创建了一个WindowsSelector的实现类对象。
 
 其 WindowsSelectorImpl构造函数为：
-     1、Pipe.open()打开一个管道（打开管道的实现后面再看）；
+     1、创建一个管道pipe，读端在高32位，写端在低32位
+     2、初始化一个PollArrayWrapper，本质上是pollfd数组
+     3、把读端fd添加到PollArrayWrapper的fd数组中，
+     4、初始化SelectionKey数组
 
-直接返回一个PipeImpl类的对象实例，PipeImpl的构造方法里调用了doPrivileged方法
-利用doPrivileged就实现了没有权限的人借用有权限的人来达到一定的目的。
-AccessController.doPrivileged(new Initializer(sp)) 经过
-权限的检查之后就会直接执行Initializer中的run方法 
-，下面来看下Initializer这个类中的run方法。
-创建两个本地的socketChannel,然后连接（链接的过程通过写一
-个随机long做两个socket的链接校验），两个socketChannel
-分别实现了管道的source与sink端。 
+----------------------------------------------------
 
+select函数 
+这里native的太多，所以分析起来不能很详细。。
+主要工作 : 轮询PollArray的FD，看有没有事件发生，
+如果有事件发生收集所有发生事件的FD，退出阻塞
 
-     2、拿到wakeupSourceFd和wakeupSinkFd两个文件描述符；
+------------------------------------------------------
 
-     3、把唤醒端的文件描述符（wakeupSourceFd）放到pollWrapper里；
-将source的POLLIN事件标识为感兴趣的，当sink端有数据写入时，
-source对应的文件描述符wakeupSourceFd就会处于就绪状态
+register函数
+新建SelectionKey，注册感兴趣事件和附件
+把新建的SelectionKey添加到pollWrapper的channel数组
 
+---------------------------------------------------------
 
------------------------
-小结
+selector.wakeup() 从阻塞状态到主动唤醒
 
-Selector selector = Selector.open()；实际上就是new 
-了一个 WindowsSelectorImpl对象实例。
-
-以及建立了Pipe，并把pipe的wakeupSourceFd放入pollArray中,
-这个pollArray是Selector的枢纽。这里是以Windows的实现来
-看，在windows下通过两个链接的socketChannel实现了Pipe，
-linux下则是直接使用系统的pipe。
+向最开始建立的pipe的sink端写入了一个字节，
+source文件描述符就会处于就绪状态，poll方法会返回，从而导致select方法返回
 
 
+详细代码有：
+package com.test;
 
-最底层方面： Selector.open()方法最终会调jni里的poll函数，
-这个函数是用c语言实现的。
-把pollfdArray放到poll里去。调用poll会使得线程挂起，
-当有客户端连接进来的时候，poll函数就会返回一个整数，
-代表了数组中有多少个socket上有数据到达。对于第一次连接这种情况，
-返回值就是1。
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
+import java.util.Iterator;
 
-接着，我们先检查pollfdArray[0]上是不是有数据，如果有的话，再去
-调用accept去接受新的连接，新的连接创建以后，我们会把新的socket放
-到pollfdArray中去，继续这个循环，然后在poll中再次休眠。
+public class SocketServerDemo2 {
 
-当pollfdArray这个数组中有任何一个socket上有数据到达，poll函数就会
-返回，然后接下来，我们逐个去检查这个socket是不是可读，如果可读，就
-去读数据(recv到buf里)；以及是不是可写，如果可写就把 buf 写到
-socket中去
+	public static void main(String[] args) throws IOException {
+		ServerSocketChannel serverChannel = ServerSocketChannel.open();
+		serverChannel.configureBlocking(false);
+		serverChannel.socket().bind(new InetSocketAddress(8080));
+		
+		//初始化管道pipe，读端在高32位，写端在低32位。
+		//初始化pollArrayWrapper，类似一个数组，将管道的读端高32位的FD写到poolArray中
+		//初始化selectionKey数组。
+		Selector selector = Selector.open();
+		
+		//注册感兴趣事件和附件，感兴趣的事件有接受、连接、读、写
+		//将selectionKey添加到对应的channel中
+		serverChannel.register(selector, SelectionKey.OP_ACCEPT);
+		while (true) {
+			//轮询pollArray的FD，比对是否有事件发生
+			//如果有，则获取所有发生事件的FD，退出阻塞。	
+			int n = selector.select();
+			if (n == 0)
+				continue;
+			Iterator ite = selector.selectedKeys().iterator();
+			while (ite.hasNext()) {
+				SelectionKey key = (SelectionKey) ite.next();
+				if (key.isAcceptable()) {
+					SocketChannel clntChan = ((ServerSocketChannel) key.channel()).accept();
+					clntChan.configureBlocking(false);
+					// 将选择器注册到连接到的客户端信道，
+					// 并指定该信道key值的属性为OP_READ，
+					// 同时为该信道指定关联的附件
+					clntChan.register(key.selector(), SelectionKey.OP_READ, ByteBuffer.allocate(1024));
+				}
+				if (key.isReadable()) {
+					//handleRead(key);
+				}
+				if (key.isWritable() && key.isValid()) {
+					//handleWrite(key);
+				}
+				if (key.isConnectable()) {
+					System.out.	println("isConnectable = true");
+				}
+				ite.remove();
+			}
+		}
+	}
+}
